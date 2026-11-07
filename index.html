@@ -10,6 +10,11 @@
         body {
             font-family: 'Inter', sans-serif;
         }
+        .format-btn, .period-btn { color: #c7d2fe; }
+        .period-btn { color: #64748b; }
+        .format-btn[aria-pressed="true"] { background: #fff; color: #4338ca; box-shadow: 0 1px 2px rgba(0,0,0,.15); }
+        .period-btn[aria-pressed="true"] { background: #4f46e5; color: #fff; }
+        .period-group:not(.hidden) { display: grid; }
     </style>
 </head>
 <body class="bg-gradient-to-br from-slate-100 to-indigo-50 dark:from-slate-900 dark:to-slate-800 min-h-screen flex items-center justify-center p-4 text-slate-800 dark:text-slate-100 transition-colors duration-300">
@@ -18,7 +23,11 @@
         <!-- Header -->
         <div class="bg-indigo-600 dark:bg-indigo-700 text-white p-6 text-center transition-colors duration-300">
             <h1 class="text-2xl font-bold tracking-tight">Time Difference</h1>
-            <p class="text-indigo-200 text-sm mt-1">24-hour format support</p>
+            <p id="header-subtitle" class="text-indigo-200 text-sm mt-1">24-hour format support</p>
+            <div id="format-toggle" role="group" aria-label="Time format" class="inline-flex mt-4 p-1 rounded-xl bg-indigo-800/40">
+                <button type="button" data-format="24" aria-pressed="true" class="format-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">24-hour</button>
+                <button type="button" data-format="12" aria-pressed="false" class="format-btn px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors">12-hour</button>
+            </div>
         </div>
 
         <div class="p-6">
@@ -26,15 +35,23 @@
             <div id="tab-diff" class="space-y-6 block transition-opacity duration-300">
                 <div class="flex flex-col sm:flex-row gap-4">
                     <div class="flex-1 space-y-2">
-                        <label for="start-time" class="block text-sm font-medium text-slate-600 dark:text-slate-300">Start Time <span class="font-normal text-slate-400 dark:text-slate-500 ml-1">(e.g., 0700 or 1930)</span></label>
+                        <label for="start-time" class="block text-sm font-medium text-slate-600 dark:text-slate-300">Start Time <span id="start-hint" class="font-normal text-slate-400 dark:text-slate-500 ml-1">(e.g., 0700 or 1930)</span></label>
                         <input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" id="start-time" class="w-full text-center bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-lg font-medium tracking-widest placeholder:text-slate-300 dark:placeholder:text-slate-500">
+                        <div id="start-period" data-target="start" role="group" aria-label="Start time AM or PM" class="period-group hidden grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50">
+                            <button type="button" data-period="AM" aria-pressed="true" class="period-btn py-2 rounded-lg text-sm font-semibold transition-colors">AM</button>
+                            <button type="button" data-period="PM" aria-pressed="false" class="period-btn py-2 rounded-lg text-sm font-semibold transition-colors">PM</button>
+                        </div>
                     </div>
                     <div class="hidden sm:flex items-center justify-center pt-8 text-slate-400 dark:text-slate-500">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
                     </div>
                     <div class="flex-1 space-y-2">
-                        <label for="end-time" class="block text-sm font-medium text-slate-600 dark:text-slate-300">End Time <span class="font-normal text-slate-400 dark:text-slate-500 ml-1">(e.g., 1545 or 0415)</span></label>
+                        <label for="end-time" class="block text-sm font-medium text-slate-600 dark:text-slate-300">End Time <span id="end-hint" class="font-normal text-slate-400 dark:text-slate-500 ml-1">(e.g., 1545 or 0415)</span></label>
                         <input type="text" inputmode="numeric" maxlength="5" placeholder="HH:MM" id="end-time" class="w-full text-center bg-slate-50 dark:bg-slate-700/50 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-white rounded-xl px-4 py-3 focus:ring-2 focus:ring-indigo-500 dark:focus:ring-indigo-400 focus:border-indigo-500 dark:focus:border-indigo-400 outline-none transition-all text-lg font-medium tracking-widest placeholder:text-slate-300 dark:placeholder:text-slate-500">
+                        <div id="end-period" data-target="end" role="group" aria-label="End time AM or PM" class="period-group hidden grid-cols-2 gap-1 p-1 rounded-xl bg-slate-100 dark:bg-slate-700/50">
+                            <button type="button" data-period="AM" aria-pressed="true" class="period-btn py-2 rounded-lg text-sm font-semibold transition-colors">AM</button>
+                            <button type="button" data-period="PM" aria-pressed="false" class="period-btn py-2 rounded-lg text-sm font-semibold transition-colors">PM</button>
+                        </div>
                     </div>
                 </div>
 
@@ -72,6 +89,11 @@
 
         // --- Core Logic ---
 
+        // --- State ---
+        let is12Hour = false;
+        const periods = { start: 'AM', end: 'AM' };
+        const inputs = { start: startTimeInput, end: endTimeInput };
+
         // Helper: Format input to HH:MM as user types
         function formatTimeInput(e) {
             let input = e.target;
@@ -81,8 +103,14 @@
             let hours = val.substring(0, 2);
             let minutes = val.substring(2, 4);
             
-            // Clamp values to valid 24h time format limits
-            if (hours.length === 2 && parseInt(hours) > 23) hours = '23';
+            // Clamp values to valid limits for the current format
+            const maxHour = is12Hour ? 12 : 23;
+            if (hours.length === 2) {
+                let h = parseInt(hours);
+                if (is12Hour && h < 1) h = 1;
+                if (h > maxHour) h = maxHour;
+                hours = String(h).padStart(2, '0');
+            }
             if (minutes.length === 2 && parseInt(minutes) > 59) minutes = '59';
             
             // Automatically insert the colon
@@ -95,18 +123,65 @@
             calculateDifference();
         }
 
-        // Helper: Convert HH:MM string to total minutes from midnight
-        function timeToMinutes(timeStr) {
+        // Helper: Convert the field's value (in the current format) to total minutes from midnight
+        function timeToMinutes(timeStr, period) {
             if (!timeStr || timeStr.length !== 5) return null;
-            const [hours, minutes] = timeStr.split(':').map(Number);
+            let [hours, minutes] = timeStr.split(':').map(Number);
             if (isNaN(hours) || isNaN(minutes)) return null;
+            if (is12Hour) {
+                if (hours < 1 || hours > 12) return null;
+                hours = (hours % 12) + (period === 'PM' ? 12 : 0);
+            }
             return (hours * 60) + minutes;
+        }
+
+        // Helper: Render total minutes into the current format; returns { text, period }
+        function minutesToField(total) {
+            const h24 = Math.floor(total / 60);
+            const m = String(total % 60).padStart(2, '0');
+            if (!is12Hour) return { text: String(h24).padStart(2, '0') + ':' + m, period: h24 >= 12 ? 'PM' : 'AM' };
+            const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+            return { text: String(h12).padStart(2, '0') + ':' + m, period: h24 >= 12 ? 'PM' : 'AM' };
+        }
+
+        function setPeriod(name, period) {
+            periods[name] = period;
+            document.querySelectorAll(`#${name}-period .period-btn`).forEach(b =>
+                b.setAttribute('aria-pressed', String(b.dataset.period === period)));
+        }
+
+        function setFormat(use12) {
+            if (use12 === is12Hour) return;
+            // Capture existing values as absolute minutes before switching
+            const current = {};
+            for (const n of ['start', 'end']) current[n] = timeToMinutes(inputs[n].value, periods[n]);
+
+            is12Hour = use12;
+
+            document.querySelectorAll('.format-btn').forEach(b =>
+                b.setAttribute('aria-pressed', String((b.dataset.format === '12') === is12Hour)));
+            document.querySelectorAll('.period-group').forEach(g => g.classList.toggle('hidden', !is12Hour));
+            document.getElementById('header-subtitle').textContent = is12Hour ? '12-hour format with AM/PM' : '24-hour format support';
+            document.getElementById('start-hint').textContent = is12Hour ? '(e.g., 0700 or 0730)' : '(e.g., 0700 or 1930)';
+            document.getElementById('end-hint').textContent = is12Hour ? '(e.g., 0345 or 0415)' : '(e.g., 1545 or 0415)';
+
+            // Convert existing values into the new format
+            for (const n of ['start', 'end']) {
+                if (current[n] === null) {
+                    if (!is12Hour) setPeriod(n, 'AM');
+                    continue;
+                }
+                const f = minutesToField(current[n]);
+                inputs[n].value = f.text;
+                setPeriod(n, f.period);
+            }
+            calculateDifference();
         }
 
         // Calculate Time Difference
         function calculateDifference() {
-            const startMins = timeToMinutes(startTimeInput.value);
-            const endMins = timeToMinutes(endTimeInput.value);
+            const startMins = timeToMinutes(startTimeInput.value, periods.start);
+            const endMins = timeToMinutes(endTimeInput.value, periods.end);
             
             // If either input is empty, reset display to blank state
             if (startMins === null || endMins === null) {
@@ -142,10 +217,21 @@
         startTimeInput.addEventListener('input', formatTimeInput);
         endTimeInput.addEventListener('input', formatTimeInput);
 
+        // Format toggle and AM/PM selectors
+        document.querySelectorAll('.format-btn').forEach(b =>
+            b.addEventListener('click', () => setFormat(b.dataset.format === '12')));
+        document.querySelectorAll('.period-btn').forEach(b =>
+            b.addEventListener('click', () => {
+                setPeriod(b.closest('.period-group').dataset.target, b.dataset.period);
+                calculateDifference();
+            }));
+
         // Reset functionality
         btnReset.addEventListener('click', () => {
             startTimeInput.value = '';
             endTimeInput.value = '';
+            setPeriod('start', 'AM');
+            setPeriod('end', 'AM');
             calculateDifference(); // Clears out the results UI 
         });
 
